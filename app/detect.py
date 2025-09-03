@@ -35,22 +35,14 @@ def run_yolo_stream(youtube_url: str, fps: int = 1, duration_sec: int = 60, conf
     """
     cmd = (
         f'streamlink --stdout "{youtube_url}" 1080p | '
-        'ffmpeg -i - -f rawvideo -pix_fmt bgr24 -'
+        'ffmpeg -re -i - -f rawvideo -pix_fmt bgr24 -'
     )
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
     start_time = time.time()
     frame_id = 0
     records = []
-
-    while time.time() - start_time < duration_sec:
-        raw_frame = proc.stdout.read(frame_size)
-        if len(raw_frame) != frame_size:
-            print("Skipped partial frame.")
-            continue
-        
-
-        """
+    """
         | Step                 | Meaning                                                   |
         | -------------------- | --------------------------------------------------------- |
         | `np.frombuffer()`    | Converts raw byte stream → image array                    |
@@ -59,19 +51,32 @@ def run_yolo_stream(youtube_url: str, fps: int = 1, duration_sec: int = 60, conf
         | `classes=[0]`        | Only detect **people** (class 0)                          |
         | `num_people`         | Number of people detected in that frame                   |
 
-        """
+    """
+
+    SKIP_FRAMES = int(30 / fps)  # assuming input stream ~30FPS
+
+    while time.time() - start_time < duration_sec:
+        raw_frame = proc.stdout.read(frame_size)
+        if len(raw_frame) != frame_size:
+            print("Skipped partial frame.")
+            continue
+
+        frame_id += 1
+
+        # Only process every N-th frame
+        if frame_id % SKIP_FRAMES != 0:
+            continue
+
         frame = np.frombuffer(raw_frame, np.uint8).reshape((height, width, 3))
         results = model.predict(source=frame, conf=conf_thresh, classes=[0], verbose=False)
-        
-        # Show annotated frame
+
         cv2.imshow("YOLO Frame", results[0].plot())
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
         num_people = len(results[0].boxes)
-
-        # now = datetime.now().isoformat(timespec="seconds")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
         print(f"[{now}] 🧍 {num_people} people (frame {frame_id})")
 
         records.append({
@@ -79,9 +84,6 @@ def run_yolo_stream(youtube_url: str, fps: int = 1, duration_sec: int = 60, conf
             "frame": frame_id,
             "people": num_people
         })
-
-        frame_id += 1
-        time.sleep(1)
 
     proc.kill()
     return records
