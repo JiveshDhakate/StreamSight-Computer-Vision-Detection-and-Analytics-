@@ -11,6 +11,8 @@ This module handles:
 from ultralytics import YOLO
 import subprocess, numpy as np, cv2, time
 from datetime import datetime,timezone
+from pathlib import Path
+Path("data/live").mkdir(parents=True, exist_ok=True)
 
 """
 | Parameter      | Meaning                                                                                      |
@@ -53,7 +55,7 @@ def run_yolo_stream(youtube_url: str, fps: int = 1, duration_sec: int = 60, conf
 
     """
 
-    SKIP_FRAMES = int(30 / fps)  # assuming input stream ~30FPS
+    SKIP_FRAMES = int(30 / fps)  # As input stream ~30FPS
 
     while time.time() - start_time < duration_sec:
         raw_frame = proc.stdout.read(frame_size)
@@ -70,9 +72,9 @@ def run_yolo_stream(youtube_url: str, fps: int = 1, duration_sec: int = 60, conf
         frame = np.frombuffer(raw_frame, np.uint8).reshape((height, width, 3))
         results = model.predict(source=frame, conf=conf_thresh, classes=[0], verbose=False)
 
-        cv2.imshow("YOLO Frame", results[0].plot())
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        annotated = results[0].plot()
+        # cv2.imshow("YOLO Frame", annotated)
+        cv2.imwrite("data/live/latest.jpg", annotated)
 
         num_people = len(results[0].boxes)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -86,4 +88,5 @@ def run_yolo_stream(youtube_url: str, fps: int = 1, duration_sec: int = 60, conf
         })
 
     proc.kill()
+    cv2.destroyAllWindows()
     return records
