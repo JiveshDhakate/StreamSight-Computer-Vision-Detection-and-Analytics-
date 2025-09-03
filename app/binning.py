@@ -16,27 +16,51 @@ def floor_to_15min(dt):
     minute = (dt.minute // 15) * 15
     return dt.replace(minute=minute, second=0, microsecond=0)
 
-def save_records_to_bins(records, output_dir="data/bins"):
-    """Groups detection records into 15-min bins and saves to CSV files."""
-    bins = defaultdict(list)
+# def save_records_to_bins(records, output_dir="data/bins"):
+#     """Groups detection records into 15-min bins and saves to CSV files."""
+#     bins = defaultdict(list)
 
-    # Group records by floored 15-min timestamp
+#     # Group records by floored 15-min timestamp
+#     for record in records:
+#         dt = datetime.fromisoformat(record["timestamp"])
+#         floored = floor_to_15min(dt)
+#         bins[floored].append(record)
+
+#     # Ensure output folder exists
+#     Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+#     # Write each bin to CSV
+#     for bin_time, group in bins.items():
+#         filename = f"{bin_time.strftime('%Y-%m-%d_%H%M')}.csv"
+#         filepath = os.path.join(output_dir, filename)
+
+#         with open(filepath, "w", newline="") as f:
+#             writer = csv.DictWriter(f, fieldnames=["timestamp", "frame", "people"])
+#             writer.writeheader()
+#             writer.writerows(group)
+
+#         print(f"Saved {len(group)} records to: {filepath}")
+
+def save_per_minute_summary(records, output_path="data/per_minute.csv"):
+    from collections import defaultdict
+
+    minute_groups = defaultdict(list)
+
     for record in records:
         dt = datetime.fromisoformat(record["timestamp"])
-        floored = floor_to_15min(dt)
-        bins[floored].append(record)
+        floored_minute = dt.replace(second=0, microsecond=0)
+        minute_groups[floored_minute].append(record["people"])
 
-    # Ensure output folder exists
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    # Sort keys
+    sorted_minutes = sorted(minute_groups.keys())
 
-    # Write each bin to CSV
-    for bin_time, group in bins.items():
-        filename = f"{bin_time.strftime('%Y-%m-%d_%H%M')}.csv"
-        filepath = os.path.join(output_dir, filename)
+    with open(output_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["timestamp", "avg_people"])
 
-        with open(filepath, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["timestamp", "frame", "people"])
-            writer.writeheader()
-            writer.writerows(group)
+        for minute in sorted_minutes:
+            people_counts = minute_groups[minute]
+            avg = round(sum(people_counts) / len(people_counts), 2)
+            writer.writerow([minute.isoformat(), avg])
 
-        print(f"Saved {len(group)} records to: {filepath}")
+    print(f"Saved per-minute summary to: {output_path}")
